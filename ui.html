@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Milk Detector</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; text-align: center; }
+    video, img { max-width: 100%; height: auto; margin: 10px 0; }
+    #cameraInput { display: none; }
+    button { padding: 10px 20px; font-size: 16px; margin: 5px; }
+  </style>
+</head>
+<body>
+  <h1>Milk Detector</h1>
+  <p>Nhấn “Chụp ảnh” để mở camera sau, hoặc “Chọn ảnh” để tải lên từ thư viện.</p>
+
+  <video id="video" autoplay playsinline muted width="320" height="240"></video><br/>
+  <button id="snapBtn">Chụp ảnh</button>
+  <button id="uploadBtn">Chọn ảnh</button>
+  <input type="file" accept="image/*" capture="environment" id="cameraInput">
+
+  <div id="preview">
+    <img id="resultImg" alt="Kết quả sẽ hiện ở đây" />
+  </div>
+
+  <script>
+    const video      = document.getElementById('video');
+    const snapBtn    = document.getElementById('snapBtn');
+    const uploadBtn  = document.getElementById('uploadBtn');
+    const cameraInput= document.getElementById('cameraInput');
+    const resultImg  = document.getElementById('resultImg');
+
+    // Hàm request camera với ưu tiên camera sau
+    function startCamera() {
+      return navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { exact: "environment" } }
+      })
+      .catch(() => {
+        // Nếu không lấy được camera sau, fallback sang bất kỳ camera nào
+        return navigator.mediaDevices.getUserMedia({ video: true });
+      })
+      .then(stream => {
+        video.srcObject = stream;
+      })
+      .catch(err => {
+        alert('Không thể truy cập camera: ' + err);
+      });
+    }
+
+    // Khởi động camera khi load trang
+    startCamera();
+
+    // Gửi ảnh dạng Base64 lên server để detect
+    async function sendImage(dataUrl) {
+      try {
+        const res = await fetch('/detect', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ image: dataUrl })
+        });
+        const json = await res.json();
+        if (json.error) {
+          alert(json.error);
+        } else {
+          resultImg.src = json.image;
+        }
+      } catch (e) {
+        alert('Lỗi khi gửi ảnh: ' + e);
+      }
+    }
+
+    // Chụp ảnh từ video
+    snapBtn.onclick = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      const dataUrl = canvas.toDataURL('image/jpeg');
+      sendImage(dataUrl);
+    };
+
+    // Chọn ảnh từ thư viện
+    uploadBtn.onclick = () => cameraInput.click();
+    cameraInput.onchange = e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => sendImage(reader.result);
+      reader.readAsDataURL(file);
+    };
+  </script>
+</body>
+</html>
